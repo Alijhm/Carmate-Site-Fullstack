@@ -1,0 +1,145 @@
+CREATE TABLE utilisateur (
+    iduser INT AUTO_INCREMENT PRIMARY KEY,
+    nomUtilisateur VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    motDePasse VARCHAR(255) NOT NULL,
+    dateDeNaissance DATE,
+    ville VARCHAR(255),
+    rue VARCHAR(255),
+    description TEXT,
+    reports INT DEFAULT 0,
+    theme TINYINT(1) DEFAULT 1,
+    connexion TINYINT(1) DEFAULT 0,
+    derniereConnexion DATETIME,
+    status VARCHAR(50) DEFAULT 'membre',
+    ban TINYINT(1) DEFAULT 0
+);
+
+CREATE TABLE token (
+    idusertok INT,
+    token VARCHAR(64) NOT NULL,
+    tokenDate DATETIME NOT NULL,
+    FOREIGN KEY (idusertok) REFERENCES utilisateur(iduser) ON DELETE CASCADE
+);
+
+CREATE TABLE avatar (
+    idavatar INT AUTO_INCREMENT PRIMARY KEY,
+    idavataruser INT,
+    tete VARCHAR(255),
+    lunettes VARCHAR(255),
+    chapeau VARCHAR(255),
+    FOREIGN KEY (idavataruser) REFERENCES utilisateur(iduser) ON DELETE CASCADE
+);
+
+CREATE TABLE evenement (
+    idevent INT AUTO_INCREMENT PRIMARY KEY,
+    titre VARCHAR(255) NOT NULL,
+    dateDebut DATETIME NOT NULL,
+    dateFin DATETIME NOT NULL,
+    ville VARCHAR(255) NOT NULL,
+    rue VARCHAR(255) NOT NULL,
+    duree VARCHAR(255),
+    type VARCHAR(255),
+    prixEntree DECIMAL(10,2),
+    nbPlaces INT,
+    description TEXT,
+    likes INT DEFAULT 0
+);
+
+CREATE TABLE organise (
+    iduserorga INT,
+    ideventorga INT,
+    FOREIGN KEY (iduserorga) REFERENCES utilisateur(iduser) ON DELETE CASCADE,
+    FOREIGN KEY (ideventorga) REFERENCES evenement(idevent) ON DELETE CASCADE
+);
+
+CREATE TABLE inscrit (
+    idusersub INT,
+    ideventsub INT,
+    FOREIGN KEY (idusersub) REFERENCES utilisateur(iduser) ON DELETE CASCADE,
+    FOREIGN KEY (ideventsub) REFERENCES evenement(idevent) ON DELETE CASCADE
+);
+
+CREATE TABLE voiture (
+    idvoiture INT AUTO_INCREMENT PRIMARY KEY,
+    nom VARCHAR(255) NOT NULL,
+    marque VARCHAR(255),
+    annee INT,
+    prix DECIMAL(10,2),
+    description TEXT,
+    dimension VARCHAR(255),
+    moteur VARCHAR(255),
+    essence VARCHAR(255),
+    transmission VARCHAR(255),
+    hybride TINYINT(1),
+    maniabilite VARCHAR(255),
+    image TEXT,
+    lien VARCHAR(255)
+);
+
+CREATE TABLE dans_historique (
+    iduserhis INT,
+    nom VARCHAR(255) NOT NULL,
+    date DATE,
+    favori TINYINT(1) DEFAULT 0,
+    FOREIGN KEY (iduserhis) REFERENCES utilisateur(iduser) ON DELETE CASCADE
+);
+
+CREATE TABLE possede_voiture (
+    iduserposs INT,
+    nomposs VARCHAR(255),
+    FOREIGN KEY (iduserposs) REFERENCES utilisateur(iduser) ON DELETE CASCADE
+);
+
+CREATE TABLE offre (
+    idvente INT AUTO_INCREMENT PRIMARY KEY,
+    iduser INT,
+    produit VARCHAR(255) NOT NULL,
+    categorie VARCHAR(255),
+    prix DECIMAL(10,2) NOT NULL,
+    etat VARCHAR(50),
+    description TEXT,
+    dateCreation DATE,
+    vendu TINYINT(1) DEFAULT 0,
+    idacheteur INT NULL,
+    dateAchat DATETIME NULL,
+    FOREIGN KEY (iduser) REFERENCES utilisateur(iduser) ON DELETE CASCADE
+);
+
+CREATE TABLE discussion (
+    iddiscussion INT AUTO_INCREMENT PRIMARY KEY,
+    titre VARCHAR(255),
+    theme VARCHAR(255),
+    date DATETIME,
+    iduserdisc INT,
+    FOREIGN KEY (iduserdisc) REFERENCES utilisateur(iduser) ON DELETE CASCADE
+);
+
+CREATE TABLE message (
+    idmessage INT AUTO_INCREMENT PRIMARY KEY,
+    contenu TEXT NOT NULL,
+    date DATETIME,
+    iddiscussion INT,
+    idusermess INT,
+    FOREIGN KEY (iddiscussion) REFERENCES discussion(iddiscussion) ON DELETE CASCADE,
+    FOREIGN KEY (idusermess) REFERENCES utilisateur(iduser) ON DELETE CASCADE
+);
+
+CREATE TABLE question (
+    numero INT PRIMARY KEY,
+    descriptif TEXT NOT NULL
+);
+
+CREATE TABLE optionrep (
+    idoption INT AUTO_INCREMENT PRIMARY KEY,
+    numeroquestion INT,
+    texte VARCHAR(255) NOT NULL,
+    profil VARCHAR(255),
+    FOREIGN KEY (numeroquestion) REFERENCES question(numero) ON DELETE CASCADE
+);
+
+CREATE TABLE captcha (
+    idcaptcha INT AUTO_INCREMENT PRIMARY KEY,
+    questionCaptcha TEXT NOT NULL,
+    reponseCaptcha VARCHAR(255) NOT NULL
+);
