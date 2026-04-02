@@ -1,0 +1,438 @@
+<?php include('includes/traitement_deco_auto.php'); ?>
+<!DOCTYPE html>
+<html lang="en">
+
+<?php
+    $pageTitle = 'CarMate — Événements';
+    include('includes/head.php');
+
+    include('includes/reinitialisation_infos_quiz.php');
+?>
+
+<?php
+    include('includes/db.php');
+
+    include('includes/choix_theme.php');
+
+    unset($_SESSION['formulaire']);
+
+    $query = 'SELECT evenement.*, avatar.tete, avatar.lunettes, avatar.chapeau, utilisateur.nomUtilisateur, utilisateur.iduser
+    FROM evenement JOIN organise ON evenement.idevent = organise.ideventorga
+    JOIN utilisateur ON organise.iduserorga = utilisateur.iduser
+    LEFT JOIN avatar ON avatar.idavataruser = utilisateur.iduser
+    WHERE dateDebut >= CURDATE() ORDER BY dateDebut ASC LIMIT 3';
+    $statement = $bdd->prepare($query);
+    $statement->execute();
+    $events = $statement->fetchAll();
+
+    $query = 'SELECT DISTINCT ville FROM evenement ORDER BY ville ASC';
+    $statement = $bdd->prepare($query);
+    $statement->execute();
+    $nomVilles = $statement->fetchAll(PDO::FETCH_COLUMN);
+?>
+
+<body class="event-page" style="<?php if(isset($_SESSION['iduser'])):if($themeSombreClair == 0):?>background-color:rgb(89, 89, 89)   ;<?php endif;endif; ?>">
+    <?php
+    include('includes/header.php');?>
+    <?php
+        $errors = $_SESSION['errors'] ?? [];
+        unset($_SESSION['errors']);
+
+        if (isset($_GET['reset-formOrga'])){
+            unset($_SESSION['saisi']);
+        }
+    ?>
+    <main class="row">
+        <div class="col-3 fond-lateral">
+            <div class="recherche ms-2">
+                <?php if(isset($_SESSION['flash_message']) && $_SESSION['flash_message']['type'] === 'danger'): ?>
+                    <div class="alert alert-danger" role="alert">
+                        <?php echo '<p>' . htmlspecialchars($_SESSION['flash_message']['message']) . '</p>'; ?>
+                    </div>
+                    <?php unset($_SESSION['flash_message']); ?>
+                <?php endif; ?>
+                <?php if(isset($_SESSION['flash_message']) && $_SESSION['flash_message']['type'] === 'success'): ?>
+                    <div class="alert alert-success" role="alert">
+                        <?php echo '<p>' . htmlspecialchars($_SESSION['flash_message']['message']) . '</p>'; ?>
+                    </div>
+                    <?php unset($_SESSION['flash_message']); ?>
+                <?php endif; ?>
+                <p><strong>Recherche un événement :</strong></p>
+                <form method="POST" action="traitement_recherche_event.php">
+                <div class="row">
+                        <div class="col-10">
+                            <input class="form-control me-2" name="recherche" type="search" placeholder="Tapez votre recherche" aria-label="Search">
+                        </div>
+                        <div class="col-1">
+                            <button class="btn" type="submit">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="white" width="20" height="20" class="bi bi-search" viewBox="0 0 16 16">
+                                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="filtre ms-2">
+            <form method="POST" action="traitement_filtre_event.php">
+                <input type="hidden" name="source" value="event">
+                <p><strong>Filtrez votre recherche :</strong></p>
+                <p class="prix">Prix :</p>
+                <input type="number" class="form-control <?php echo isset($errors['prix']) ? 'is-invalid' : ''; ?>" id="validationCustom03" name="prix" 
+                value="" min="0" step="1">
+
+                <p class="lieu">Ville :</p>
+                    <select class="form-select" name="ville">
+                        <option value="-1">Choisissez une ville</option>
+                        <?php foreach($nomVilles as $key): ?>
+                            <option value="<?= $key ?>"><?= $key ?></option>
+                        <?php endforeach; ?>
+                    </select>
+
+                <p class="type">Type d'événement</p>  
+                <select class="form-select" name="type">
+                        <option value="-1">Choisissez un type</option>
+                        <option value="Salon">Salon</option>
+                        <option value="Conférence">Conférence</option>
+                        <option value="Exposition">Exposition</option>
+                        <option value="Rassemblement">Rassemblement</option>
+                        <option value="Forum">Forum</option>
+                        <option value="Course">Course</option>
+                </select>
+
+                <p class="duree">Durée</p>
+                <select class="form-select" name="duree">
+                        <option value="-1">Choisissez une durée</option>
+                        <option value="-30min">-30min</option>
+                        <option value="-1h">-1h</option>
+                        <option value="-2h">-2h</option>
+                        <option value="+2h">+2h</option>
+                </select>
+
+                <div class="row">
+                    <div class="col-12 ms-4 mt-4">
+                        <button type="submit" class="btn boutonRecherche">Recherche</button>
+                    </div>
+                </div>
+            </form>
+            </div>
+            <div class="event-proposal ms-2">
+                <p><strong>Vous souhaitez organiser votre propre événement ?</strong></p>
+                <p>Remplissez ce formulaire afin de partager votre événement avec l'ensemble de la communauté automobile !</p>
+                <button type="button" class="btn btn-light btn-sm mb-4" onclick="afficherFormulaire()">Formulaire</button>
+
+                <div class="cadreFormulaire mt-5 mb-5" id="cadreFormulaire" style="display: <?php echo !empty($errors) ? 'block' : 'none'; ?>;">
+                    <div class="col-6 mb-4">
+                        <h3>Formulaire d'organisation</h3>
+                    </div>
+                    <form id="event-formulaire" class="row g-3 needs-validation" novalidate method="POST" action="traitement.php">
+                        <div class="col-6">
+                            <label for="validationCustom01" class="form-label">Titre de l'événement</label>
+                            <input type="text" class="form-control <?php echo isset($errors['titre']) ? 'is-invalid' : ''; ?>" id="validationCustom01" name="titre"
+                            value="<?php echo $_SESSION['saisi']['titre'] ?? ''; ?>" required>
+                            <div class="invalid-feedback">
+                                <?php echo $errors['titre'] ?? ''; ?>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <label for="validationCustomUsername" class="form-label">Adresse mail de l'organisateur</label>
+                            <div class="input-group has-validation">
+                            <span class="input-group-text" id="inputGroupPrepend">@</span>
+                            <input type="email" class="form-control <?php echo isset($errors['email']) ? 'is-invalid' : ''; ?>" id="validationCustomUsername" aria-describedby="inputGroupPrepend" name="email" 
+                            value="<?php echo $_SESSION['saisi']['email'] ?? ''; ?>" required>
+                            <div class="invalid-feedback">
+                                <?php echo $errors['email'] ?? ''; ?>
+                            </div>
+                            </div>
+                        </div>
+                        <div class="col-2">
+                            <label for="validationCustom03" class="form-label">Prix (en €)</label>
+                            <input type="number" class="form-control <?php echo isset($errors['prix']) ? 'is-invalid' : ''; ?>" id="validationCustom03" name="prix" 
+                            value="<?php echo $_SESSION['saisi']['prix'] ?? ''; ?>" min="0" step="1" required>
+                            <div class="invalid-feedback">
+                                <?php echo $errors['prix'] ?? ''; ?>
+                            </div>
+                        </div>
+                        
+
+                        <div class="col-4">
+                            <label for="validationCustom03" class="form-label">Ville</label>
+                            <input type="text" class="form-control <?php echo isset($errors['ville']) ? 'is-invalid' : ''; ?>" id="validationCustom03" name="ville" 
+                            value="<?php echo $_SESSION['saisi']['ville'] ?? ''; ?>" required>
+                            <div class="invalid-feedback">
+                                <?php echo $errors['ville'] ?? ''; ?>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <label for="validationCustom03" class="form-label">Rue</label>
+                            <input type="text" class="form-control <?php echo isset($errors['rue']) ? 'is-invalid' : ''; ?>" id="validationCustom03" name="rue" 
+                            value="<?php echo $_SESSION['saisi']['rue'] ?? ''; ?>" required>
+                            <div class="invalid-feedback">
+                                <?php echo $errors['rue'] ?? ''; ?>
+                            </div>
+                        </div>
+                        <div class="col-2">
+                            <label for="validationCustom05" class="form-label">Durée</label>
+                            <select id="inputState" class="form-select <?php echo isset($errors['duree']) ? 'is-invalid' : ''; ?>" name="duree" required>
+                                <option value="" selected>Choisissez...</option>
+                                <hr class="dropdown-divider">
+                                <option value="-30min"  <?php echo (isset($_SESSION['saisi']['duree']) && $_SESSION['saisi']['duree'] === '-30min') ? 'selected' : ''; ?> >-30min</option>
+                                <option value="-1h"  <?php echo (isset($_SESSION['saisi']['duree']) && $_SESSION['saisi']['duree'] === '-1h') ? 'selected' : ''; ?> >-1h</option>
+                                <option value="-2h"  <?php echo (isset($_SESSION['saisi']['duree']) && $_SESSION['saisi']['duree'] === '-2h') ? 'selected' : ''; ?> >-2h</option>
+                                <option value="+2h"  <?php echo (isset($_SESSION['saisi']['duree']) && $_SESSION['saisi']['duree'] === '+2h') ? 'selected' : ''; ?> >+2h</option>
+                            </select>
+                            <div class="invalid-feedback">
+                                <?php echo $errors['duree'] ?? ''; ?>
+                            </div>
+                        </div>
+                        <div class="col-2">
+                            <label for="validationCustom03" class="form-label">Capacité</label>
+                            <input type="number" class="form-control <?php echo isset($errors['capacite']) ? 'is-invalid' : ''; ?>" name="capacite" 
+                            value="<?php echo $_SESSION['saisi']['capacite'] ?? ''; ?>" min="0" step="1" required>
+                            <div class="invalid-feedback">
+                                <?php echo $errors['capacite'] ?? ''; ?>
+                            </div>
+                        </div>
+
+                        <div class="col-4" id="date-debut">
+                            <label for="start">Date  de début</label>
+                            <input
+                            type="date"
+                            name="dateDebut"
+                            class="form-control <?php echo isset($errors['dateDebut']) ? 'is-invalid' : ''; ?>"
+                            value="<?php echo $_SESSION['saisi']['dateDebut'] ?? ''; ?>" required/>
+                            <div class="invalid-feedback">
+                                <?php echo $errors['dateDebut'] ?? ''; ?>
+                            </div>
+                        </div>
+                        <div class="col-4" id="date-fin">
+                            <label for="start">Date  de fin</label>
+                            <input
+                            type="date"
+                            name="dateFin"
+                            class="form-control <?php echo isset($errors['dateFin']) ? 'is-invalid' : ''; ?>"
+                            value="<?php echo $_SESSION['saisi']['dateFin'] ?? ''; ?>" required/>
+                            <div class="invalid-feedback">
+                                <?php echo $errors['dateFin'] ?? ''; ?>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <label for="inputState">Type</label>
+                            <select id="inputState" class="form-select <?php echo isset($errors['type']) ? 'is-invalid' : ''; ?>" name="type" required>
+                                <option value="" selected>Choisissez...</option>
+                                <hr class="dropdown-divider">
+                                <option value="Salon"  <?php echo (isset($_SESSION['saisi']['type']) && $_SESSION['saisi']['type'] === 'Salon') ? 'selected' : ''; ?> >Salon</option>
+                                <option value="Conférence"  <?php echo (isset($_SESSION['saisi']['type']) && $_SESSION['saisi']['type'] === 'Conférence') ? 'selected' : ''; ?> >Conférence</option>
+                                <option value="Exposition"  <?php echo (isset($_SESSION['saisi']['type']) && $_SESSION['saisi']['type'] === 'Exposition') ? 'selected' : ''; ?> >Exposition</option>
+                                <option value="Rassemblement"  <?php echo (isset($_SESSION['saisi']['type']) && $_SESSION['saisi']['type'] === 'Rassemblement') ? 'selected' : ''; ?> >Rassemblement</option>
+                                <option value="Forum"  <?php echo (isset($_SESSION['saisi']['type']) && $_SESSION['saisi']['type'] === 'Forum') ? 'selected' : ''; ?> >Forum</option>
+                                <option value="Course"  <?php echo (isset($_SESSION['saisi']['type']) && $_SESSION['saisi']['type'] === 'Course') ? 'selected' : ''; ?> >Course</option>
+                            </select>
+                            <div class="invalid-feedback">
+                                <?php echo $errors['type'] ?? ''; ?>
+                            </div>
+                        </div>
+                        
+
+                        <div class="col-12" id="event-description">
+                            <label for="name">Description (255 caractères max)</label>
+                            <input
+                            type="text"
+                            name="description"
+                            class="form-control <?php echo isset($errors['description']) ? 'is-invalid' : ''; ?>"
+                            required
+                            minlength="0"
+                            maxlength="255"
+                            size="100"
+                            value="<?php echo $_SESSION['saisi']['description'] ?? ''; ?>" />
+                            <div class="invalid-feedback">
+                                <?php echo $errors['description'] ?? ''; ?>
+                            </div>
+                        </div>     
+
+                        <div class="col-7">
+                            <div class="form-check">
+                            <input class="form-check-input <?php echo isset($errors['attestation']) ? 'is-invalid' : ''; ?>" type="checkbox" id="invalidCheck" name="attestation" required>
+                            <label class="form-check-label <?php echo isset($errors['attestation']) ? 'text-danger' : ''; ?>" for="invalidCheck">
+                                J'atteste sur l'honneur que l'événement aura bien lieu.
+                            </label>
+                            </div>
+                        </div>
+                        <div class="col-12 btn-formulaire mt-4">
+                            <button type="submit" class="btn-vld">Valider</button>
+                            <button type="button" class="btn-cls" id="closeButton" onclick="window.location.href='?reset-formOrga'">Abandonner le formulaire</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="line-vertical"></div>
+        </div>
+        <div class="col-9 zone-event">
+            <div class="row ms-4 mt-5 me-5">
+                    <h1>Nos prochains événements CarMate</h1>
+                    <div class="line5 mb-2 ms-2"></div>
+                    <p><em>CarMate vous ouvre les portes du monde automobile : salons, conférences, courses et rassemblements rythment notre passion. Trouvez l'événement idéal ou mettez en lumière le vôtre !</em></p>
+            </div>
+            <div class="row ms-4 mt-2 mb-2">
+                <?php if (!empty($events)): ?>
+                    <div id="carouselExampleAutoplaying" class="carousel slide" data-bs-ride="carousel">
+                        <div class="carousel-inner">
+                            <?php foreach ($events as $index => $event): ?>
+                                <div class="carousel-item <?= $index === 0 ? 'active' : '' ?>" id="carousel-event">
+                                    <div class="fondCarEvent">
+                                        <div class="row">
+                                            <div class="col-8">
+                                                <div class="row">
+                                                    <div class="col-1 mt-1">
+                                                        <form method="POST" action="traitement_event_enregistre.php">
+                                                            <input type="hidden" name="eventid" value="<?php echo $event['idevent']; ?>">
+                                                            <input type="hidden" name="event-titre" value="<?php echo $event['titre']; ?>">
+                                                            <input type="hidden" name="event-dateDebut" value="<?php echo $event['dateDebut']; ?>">
+                                                            <input type="hidden" name="event-dateFin" value="<?php echo $event['dateFin']; ?>">
+                                                            <button class="boutonLike" name="action" value="like">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" style="color:#f52938" width="32" height="32" fill="currentColor" class="bi bi-save" viewBox="0 0 16 16">
+                                                                <path d="M2 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H9.5a1 1 0 0 0-1 1v7.293l2.646-2.647a.5.5 0 0 1 .708.708l-3.5 3.5a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L7.5 9.293V2a2 2 0 0 1 2-2H14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h2.5a.5.5 0 0 1 0 1z"/>
+                                                            </svg>
+                                                            </button>
+                                                        </form>
+                                                    </div>
+                                                    <div class="col-11">
+                                                        <div class="col-12 d-flex align-items-center">
+                                                        <h3><?= htmlspecialchars($event['titre']) ?></h3>
+                                                        <p class="mb-0 ms-2"> proposé par
+                                                            <a style="text-decoration:none;color:white" href="<?= $event['iduser'] == $_SESSION['iduser'] ? 'profil.php' : 'profil_autre.php?id=' . $event['iduser'] ?>">
+                                                                <?= htmlspecialchars($event['nomUtilisateur']) ?>
+                                                            </a>
+                                                        </p>
+
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="line5 mb-2 ms-5"></div>
+                                                <p>Ne tardez pas, cet événement débute dès le <strong><?= htmlspecialchars($event['dateDebut']) ?></strong> </p>
+                                                <p><?= htmlspecialchars($event['description']) ?></p>
+                                                <p>Du <strong><?= htmlspecialchars($event['dateDebut']) ?></strong> au <strong><?= htmlspecialchars($event['dateFin'])?></strong>. À <strong><?= htmlspecialchars($event['ville']) ?></strong>, <strong><?= htmlspecialchars($event['rue']) ?></strong></p>
+                                                <p>Estimation du temps à consacrer à l'événement : <strong><?= htmlspecialchars($event['duree']) ?></strong></p>
+                                                <p>Prix : <strong><?= htmlspecialchars($event['prixEntree']) ?></strong> €</p>
+                                                <p>Type : <strong><?= htmlspecialchars($event['type']) ?></strong></p>
+                                                <p>Places disponibles : <strong><?= htmlspecialchars($event['nbPlaces']) ?></strong> (déjà <strong><?= htmlspecialchars($event['likes']) ?></strong> likes)</p>
+                                            </div>
+                                            <div class="col-4">
+                                                <?php if(isset($event['tete']) && !empty($event['tete'])):?>
+                                                    <?php if($event['tete'] == 'avatar1'): ?>
+                                                        <svg style="display: flex;justify-self:center" width="70%" height="auto" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 762 762" fill="none" shape-rendering="auto" width="180%" height="auto"><metadata xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"><rdf:RDF><rdf:Description><dc:title>Adventurer</dc:title><dc:creator>Lisa Wischofsky</dc:creator><dc:source xsi:type="dcterms:URI">https://www.figma.com/community/file/1184595184137881796</dc:source><dcterms:license xsi:type="dcterms:URI">https://creativecommons.org/licenses/by/4.0/</dcterms:license><dc:rights>Remix of „Adventurer” (https://www.figma.com/community/file/1184595184137881796) by „Lisa Wischofsky”, licensed under „CC BY 4.0” (https://creativecommons.org/licenses/by/4.0/)</dc:rights></rdf:Description></rdf:RDF></metadata><mask id="viewboxMask"><rect width="762" height="762" rx="0" ry="0" x="0" y="0" fill="#fff" /></mask><g mask="url(#viewboxMask)"><path d="M396 164.8a224.8 224.8 0 0 1 104.8 42.4c6.2 4.9 12.5 9.4 18 15a225.4 225.4 0 0 1 71.8 149 58.5 58.5 0 0 1 50.9 42.2 71 71 0 0 1-27.6 76.5c-11 7.7-24.5 12-38 11.7-5 0-10-1.6-15-1.8-1.9 2.2-3.3 4.9-4.8 7.3A223.3 223.3 0 0 1 389 609.8c-11 .7-21.9 2-33 .7a223.7 223.7 0 0 1-178.8-342.3A223.4 223.4 0 0 1 352 163.5c14.6-1.4 29.4-.3 44 1.3Z" fill="#000"/><path fill-rule="evenodd" clip-rule="evenodd" d="M498.8 213.2A216 216 0 0 0 363 169c-13-.2-26.2 1.6-39 4a218 218 0 0 0-113.6 365.5 218.5 218.5 0 0 0 260.4 40.2c35-18.8 64.2-47.3 84.4-81.5l-3-1.6c-2.8-1.4-5.7-3-8-5-2.2-2-.3-5.8 2.7-4.7 1.5.7 3 1.6 4.4 2.4a55 55 0 0 0 59.6-3.6 64.5 64.5 0 0 0 25-69.8 53.1 53.1 0 0 0-24-31 52.6 52.6 0 0 0-47-2.8c-1.6.8-3.4 1.5-5 1.3-2.5-.2-2.8-4.2-.6-5.2 8-4 16.5-5.6 25.4-6.4a217 217 0 0 0-72-146.4c-4.4-4-8.7-8.1-13.9-11.3Zm107.6 196.2c2-1.2 1.3-5.1-1.4-5-2 0-4.2.8-6.2 1.6l-1.4.4a95.1 95.1 0 0 0-25.5 12.4c-2.2 2-2.2 4.4.1 6.2a92 92 0 0 0 5.2 2.8 36 36 0 0 1 13 9.2c-.2 1.9-2 3.4-3.4 4.5l-.2.2c-3.9 3-8.8 5-13.6 7-2.5 1-4.9 2-7.1 3.1-1.7.8-2.6 2.2-1.6 3.9 1 2 3.2 1.1 5 .5l.6-.2 5.4-2.3c5.4-2.3 11-4.5 15.4-8 2.7-2.1 5.1-5.1 5.4-8.7-.5-3.4-2.7-5.7-5.3-7.8a83 83 0 0 0-11.6-7.2l-1.1-.6c5.4-3 10.8-5.6 16.6-7.7l5-1.7a52 52 0 0 0 6.7-2.6Z" fill="#f2d3b1"/><g transform="translate(-161 -83)"><path d="M619.4 468.6c3.8 2.6 8 5.3 11.1 8.9.3 1.6.1 3.4 0 5-1.9.7-3.3 1.1-5.3.3a142.2 142.2 0 0 0-91.4 0c-12.5 4.2-25 10.3-35.2 18.8-1.4 1-4 2.9-5.3 1.1-1.8-1.6-.7-3.5.1-5.2a80.6 80.6 0 0 1 30.7-30.4 94.1 94.1 0 0 1 95.3 1.5ZM405.5 480.4a56.6 56.6 0 0 1 31.2 18c2.8 3.8 6.5 8 5.9 13.1-1.6 0-3.3.7-4.6-.5a50.8 50.8 0 0 0-13.9-8 99.8 99.8 0 0 0-48.6-5.1 75 75 0 0 0-36 13.7c-1.9 1.2-3.1 2.8-5.6 1.8-1.2-1.9-1-4.5.3-6.2 16-21.8 45-31.8 71.3-26.8Z" fill="#000"/></g><g transform="translate(-161 -83)"><path d="M614 407a133.9 133.9 0 0 0-92-35 175 175 0 0 0-26.4 3c-1.5 3.3-2.5 6.6-3.5 10l-1.2 3.7v-1.4a170 170 0 0 0-1.4-11.4l-3.2-1.5-.8 1.1c-.6.8-1.3 1.6-1.3 2.4 0 3.8.3 7.5.7 11.3.3 2.8.6 5.5.7 8.3l.2 2.2c.1 2.4.3 5 1.6 6.9 2.9.7 6-.4 9-1.4l3.1-1c19-5.5 39.2-6.8 58.7-4.4 20 2.3 40 8.3 57.4 18.6 2 1 4 1.8 6.2 2.5l1.7-3.4c-2.7-4-6-7.3-9.5-10.5ZM422.3 399.6c0-4.2.2-8.5 0-12.7-.3-2.5-1.9-2.5-3.7-2.6h-1c-1 3.6-1 7.5-1.2 11.3l-.3 5-4.5-11.4-.4-.8c-.4-1.1-.9-2.3-2.2-2.3-2.5 0-5 .4-7.5.9l-3.5.6a128 128 0 0 0-52 20.3 53 53 0 0 0-16.7 18.5c-1.5 3.2-2.9 6.5-1.6 10h.4c1 .4 2.6.9 3.4.1a92 92 0 0 0 2.7-2.1c2-1.7 4.1-3.4 6.5-4.6a152.8 152.8 0 0 1 68.3-15.3c1.9 0 3.7.2 5.5.5 1.9.3 3.7.5 5.6.5 1.8-1.2 1.9-3.6 2-5.7V408c0-2.8 0-5.6.2-8.4Z" fill="#000"/></g><g transform="translate(-161 -83)"><path d="M516.5 555.6c6 4.4 11.7 10 15.3 16.6 2.6 4.8 3.2 11.7-.4 16.1-4.2 5.4-11.5 7.6-18 8.8a151 151 0 0 1-47.4-1.6c-5.7-1.1-10.2 1.6-16 2.6-8.7 1.5-18.4 2.9-27 1-5.2-1-10.3-3.2-13.4-7.7-2.8-3.9-2.6-9.3-1.1-13.7 1.6-4 4.1-8 7-11.2 1.4-1.7 3.1-1 5-1.1.3 1.8 1 3.2-.4 4.8-2.6 3.3-5.2 6.4-6.4 10.5-1.1 3.3-.3 7 2.4 9.2 3 2.4 7.2 3.5 11 3.9a76 76 0 0 0 23-1.8c5.7-1 10-3.5 15.9-2.5 12 2 23.8 3.5 36 2.8 7-.2 14-1 20.3-4 3.2-1.9 6-4.2 5.7-8.3-.3-6-6.1-11.8-10.3-15.7-2.5-2.6-6.7-4-6-8.4 1.8-.9 3-1.8 4.8-.3Z" fill="#000"/></g><g transform="translate(-161 -83)"></g><g transform="translate(-161 -83)"></g><g transform="translate(-161 -83)"><path d="M533 175.3a225 225 0 0 1 71 11.6 102.8 102.8 0 0 1 44 28c6.1 7.1 10.3 15.5 12.8 24.5 26 6.7 50.3 18.8 71.8 35A226.3 226.3 0 0 1 822.4 433c2.6 31-2.2 62.2-16.5 90-1.8 3.3-2.4 6.9-3.4 10.5a71.8 71.8 0 0 1-26.9 39A61.6 61.6 0 0 0 778 607a37.5 37.5 0 0 0 13.8 18.1c2 1.6 4.9 2.6 3.6 5.9-1.6 1.8-4.2 2.9-6.3 4a74.1 74.1 0 0 1-48.2 3 63.8 63.8 0 0 1-36.6-24.4c-1.7-2.6-3.8-5.6-4.4-8.7.7-1.7 1.8-3 2.9-4.3 5.1-6.3 9.6-13.3 13.3-20.5-3.7-2.1-8.3-4-11.3-7-1.3-2.1.6-5.2 3.1-4.2 4.8 2.3 9 5.6 14.1 7.2a55.1 55.1 0 0 0 23.1 2.2 59.7 59.7 0 0 0 34-16.4 66.3 66.3 0 0 0 19.5-37c1.5-11 .8-21.9-3.4-32.1a52 52 0 0 0-62.8-31c5 18.1.5 38.4-7.4 55a81.2 81.2 0 0 1-24.3 30.7A31.2 31.2 0 0 1 680 554c-2.4-.5-5.4-.9-4.9-4 1.8-2.3 4.7-3.2 6.5-5.4 2.7-3.3 4.2-7.8 5.2-11.8a106 106 0 0 0 2-26.8c-1-14.5-2.9-28.7-6.4-42.8-.2-1.7-1.7-1.8-3-2.6a86.8 86.8 0 0 1-31.2-24.7 192.7 192.7 0 0 1-27-45 427.7 427.7 0 0 1-27.5-94.9c-13.5-6.2-28-10.3-42.7-12.8a92.3 92.3 0 0 0-22.8-1c-2.7.2-5 1.3-7.3 2.6 1.4 2 2.6 4 4.6 5.6 2.2 1.8 5 3 7 5 1.8 1.8 0 5-2.5 4.5-3.4-.6-6.6-2-10-2.8-15.2-4-30.8-6.5-46.5-7.2-11.6-1.3-23-.2-34.5.7a185 185 0 0 0-47.2 11c-2.9 1.1-5.4 2.5-7.7 4.5A214.4 214.4 0 0 0 310 466a217.4 217.4 0 0 0 107.1 191.8c2.7 1.6 6 2.9 8.2 5.1a32.8 32.8 0 0 1-15 30.4 47.7 47.7 0 0 1-50 .7 66 66 0 0 1-14.3 37 59.3 59.3 0 0 1-30 21.2c-2 .4-4 1.3-5.8-.4-2.2-1.7-.9-5.4-1-7.8.7-9.3-3.9-17.4-10.4-23.6a49.7 49.7 0 0 1-24.2 19.3A71.7 71.7 0 0 1 208 731a47.2 47.2 0 0 1-19-28.1c-.6-2.5.3-5 1.8-7 4.3-.6 8.4.2 12.8-1.1a39 39 0 0 0 22.1-19.9 68.2 68.2 0 0 0 6.2-44.3c-21-4.5-41-14-57-28.5A109.5 109.5 0 0 1 143 487.1a128.6 128.6 0 0 1 45.5-64.4c-6.2-15.6-2.3-32.3 5.6-46.5a94.6 94.6 0 0 1 45.5-40.5c10.5-4.4 22-6.1 33.3-4.4a63.7 63.7 0 0 1 .3-26 93.7 93.7 0 0 1 19.4-37.6c12-14.8 27.4-27.2 43.3-37.7 25-16.4 53-28.7 81.4-37.6A366.8 366.8 0 0 1 533 175.3Z" fill="#000"/><path d="M557 182.5a171 171 0 0 1 66 19.5 67.5 67.5 0 0 1 29.6 31.5c1.5 3.4 2 7 3.3 10.5 3.3 1.3 7 1.8 10.3 3a210 210 0 0 1 96.1 62.7 220.8 220.8 0 0 1 52 105.6C820 447 817.8 481 805 511c-.8-6-1.5-11.9-3.6-17.6a58.3 58.3 0 0 0-29.4-33.5 59.4 59.4 0 0 0-44-2.9c-1.4.4-2.5 1.2-2 2.9 1.4 6.6 3 13.1 2.6 20a93.9 93.9 0 0 1-17.3 48.4 49.6 49.6 0 0 1-24.8 19.7c5.3-8.2 7-17.5 7.7-27a196.9 196.9 0 0 0-7-61.6c-.6-2.7-2.9-2.9-5-4A78.9 78.9 0 0 1 654 434a184 184 0 0 1-27.9-46.2 404 404 0 0 1-25.4-85.6c-.6-3.2-.8-6.8-2.2-9.8-1.5-1.8-3.6-3.1-5.5-4.6a305 305 0 0 0-101.3-54.4c-23-6.5-47-9.6-70.8-7-23 2.5-44.8 10.7-63.6 24a109.6 109.6 0 0 0-35.4 45.8c-.6 1.6-1 4.2 1.1 4.9 2 1.1 4-2 4.6-3.5 4.2-9.9 9.7-19 16.7-27.2a106.2 106.2 0 0 1 36.2-26.8c16.7-7.9 35-11.8 53.4-12.3 28.6-.8 56.3 6.1 82.5 17.1a304.4 304.4 0 0 1 61.5 35.2c-12.4-3.8-25-6.6-38-7.5-5.9-.3-12.5-.4-18 1.5-2.7 1-5 2.6-6.1 5.3-.8 2.8.3 5 1.2 7.6a221.8 221.8 0 0 0-119.6 2.9c-5.2 1.5-10 2.1-14.3 5.8a214.7 214.7 0 0 0-51 62c-8.4 14-14.5 29.5-18.8 45.3a224.8 224.8 0 0 0 23 179.1A224.1 224.1 0 0 0 420 666c-.5 8.3-4 15.4-10.4 20.6a41 41 0 0 1-47 1.8c-2-1-3.6-2.8-6.1-1.9-2.2.6-2 3.8-2 5.5 0 11.8-4.3 23-11 32.6-7 10-16.5 18.2-28.3 21.8a35 35 0 0 0-5-21.4c-2.8-4.3-6.4-9.1-11.1-11.3-4-.2-5.1 3.8-7.2 6.3a51 51 0 0 1-37.9 18.4 64.7 64.7 0 0 1-47.2-16.2 40 40 0 0 1-12.1-20.8c4.9 0 9.7-.4 14.2-2.5 12-5 20.4-16 25.1-28 4.8-12.2 6.5-26 4.1-39-.4-2-.5-4.5-1.7-6.2-2-1-4.4-1.2-6.6-1.8-20.5-4.8-39.8-15-54.9-29.8a103.6 103.6 0 0 1-25.2-108.3 122 122 0 0 1 39.3-55.9c1.8-1.6 4.4-3 5.7-5 .6-3.3-1.8-6.8-2.4-10a51 51 0 0 1 6.2-34.4 89 89 0 0 1 38.7-37.3 53.6 53.6 0 0 1 38.9-5c1.9.7 3.8-.1 4.2-2.2-.2-1.6-.7-3.3-1.1-4.9-2.3-8-2-17-.1-25 3-12.3 9.2-23.2 17-33 10.8-14 24.8-25.8 39.3-35.8 21.6-14.6 45.6-26 70.1-34.8a375.4 375.4 0 0 1 65.7-16.9c28.3-4.7 57.2-6.2 85.8-3.1ZM768.9 576.6c-.6 8.6-.9 17 1.4 25.4a49 49 0 0 0 17 27.5c-17.3 7.7-38 7-55.2-.6a51.6 51.6 0 0 1-26-23.3c5.8-7.3 11-15 15.2-23.3 4.6.7 9.1 2 13.7 2.4 11.8.4 23.5-2.5 33.9-8Z" fill="#b9a05f"/></g><g transform="translate(-161 -83)"></g></g></svg>
+                                                    <?php elseif($event['tete'] == 'avatar2'): ?>
+                                                        <svg style="display: flex;justify-self:center" width="70%" height="auto" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 762 762" fill="none" shape-rendering="auto" width="180%" height="auto"><metadata xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"><rdf:RDF><rdf:Description><dc:title>Adventurer</dc:title><dc:creator>Lisa Wischofsky</dc:creator><dc:source xsi:type="dcterms:URI">https://www.figma.com/community/file/1184595184137881796</dc:source><dcterms:license xsi:type="dcterms:URI">https://creativecommons.org/licenses/by/4.0/</dcterms:license><dc:rights>Remix of „Adventurer” (https://www.figma.com/community/file/1184595184137881796) by „Lisa Wischofsky”, licensed under „CC BY 4.0” (https://creativecommons.org/licenses/by/4.0/)</dc:rights></rdf:Description></rdf:RDF></metadata><mask id="viewboxMask"><rect width="762" height="762" rx="0" ry="0" x="0" y="0" fill="#fff" /></mask><g mask="url(#viewboxMask)"><path d="M396 164.8a224.8 224.8 0 0 1 104.8 42.4c6.2 4.9 12.5 9.4 18 15a225.4 225.4 0 0 1 71.8 149 58.5 58.5 0 0 1 50.9 42.2 71 71 0 0 1-27.6 76.5c-11 7.7-24.5 12-38 11.7-5 0-10-1.6-15-1.8-1.9 2.2-3.3 4.9-4.8 7.3A223.3 223.3 0 0 1 389 609.8c-11 .7-21.9 2-33 .7a223.7 223.7 0 0 1-178.8-342.3A223.4 223.4 0 0 1 352 163.5c14.6-1.4 29.4-.3 44 1.3Z" fill="#000"/><path fill-rule="evenodd" clip-rule="evenodd" d="M498.8 213.2A216 216 0 0 0 363 169c-13-.2-26.2 1.6-39 4a218 218 0 0 0-113.6 365.5 218.5 218.5 0 0 0 260.4 40.2c35-18.8 64.2-47.3 84.4-81.5l-3-1.6c-2.8-1.4-5.7-3-8-5-2.2-2-.3-5.8 2.7-4.7 1.5.7 3 1.6 4.4 2.4a55 55 0 0 0 59.6-3.6 64.5 64.5 0 0 0 25-69.8 53.1 53.1 0 0 0-24-31 52.6 52.6 0 0 0-47-2.8c-1.6.8-3.4 1.5-5 1.3-2.5-.2-2.8-4.2-.6-5.2 8-4 16.5-5.6 25.4-6.4a217 217 0 0 0-72-146.4c-4.4-4-8.7-8.1-13.9-11.3Zm107.6 196.2c2-1.2 1.3-5.1-1.4-5-2 0-4.2.8-6.2 1.6l-1.4.4a95.1 95.1 0 0 0-25.5 12.4c-2.2 2-2.2 4.4.1 6.2a92 92 0 0 0 5.2 2.8 36 36 0 0 1 13 9.2c-.2 1.9-2 3.4-3.4 4.5l-.2.2c-3.9 3-8.8 5-13.6 7-2.5 1-4.9 2-7.1 3.1-1.7.8-2.6 2.2-1.6 3.9 1 2 3.2 1.1 5 .5l.6-.2 5.4-2.3c5.4-2.3 11-4.5 15.4-8 2.7-2.1 5.1-5.1 5.4-8.7-.5-3.4-2.7-5.7-5.3-7.8a83 83 0 0 0-11.6-7.2l-1.1-.6c5.4-3 10.8-5.6 16.6-7.7l5-1.7a52 52 0 0 0 6.7-2.6Z" fill="#9e5622"/><g transform="translate(-161 -83)"><path d="M550.3 424.4a65.7 65.7 0 0 1 68.2 43.3A65 65 0 0 1 598 540a65.4 65.4 0 1 1-47.7-115.6Z" fill="#000"/><path d="M549.3 430.3a59.6 59.6 0 1 1 15.1 118.3 59.6 59.6 0 0 1-15.1-118.3Z" fill="#fff"/><path d="M381.2 447A55.3 55.3 0 0 1 441 492a55 55 0 1 1-59.8-44.8Z" fill="#000"/><path d="M378.2 453.3a49.1 49.1 0 0 1 57.2 57.4 49.4 49.4 0 1 1-57.1-57.4Z" fill="#fff"/><path d="M527.2 466.2a23.8 23.8 0 1 1 5.7 47.1 23.8 23.8 0 0 1-5.6-47.1ZM358.5 480.9a21.8 21.8 0 0 1 28 16.5A21.7 21.7 0 0 1 369 523a21.9 21.9 0 0 1-24.6-14.2 22.3 22.3 0 0 1 14.1-28Z" fill="#000"/></g><g transform="translate(-161 -83)"><path d="M523.2 384.4c6.2-.5 13.1-.6 18.5 3a10 10 0 0 1 4.5 10.7c-1.6 6.1-6.7 10.9-11.6 14.4a67.6 67.6 0 0 1-30.6 11.6c-5.6.5-12.5.4-17.5-2.6a10.2 10.2 0 0 1-5.2-10.3c1-5.8 5.5-10.5 10-14 9.1-7 20.5-11.3 32-12.8ZM392.2 401.2a47 47 0 0 1 26.3 5.3c3.9 2.2 7.4 5.9 8 10.5.3 4.2-2 7.8-5.3 10.2-4.5 3.6-9.8 5-15.4 6-10 1-20.6.3-29.5-4.6-3.9-2.2-7.9-5.8-8.4-10.5-.8-4.3 2-8.5 5.3-10.9a36 36 0 0 1 19-6Z" fill="#000"/></g><g transform="translate(-161 -83)"><path d="m397.2 574.5 55.8-.4c15.6-.5 31.3-.2 47-.4 3.8 0 7.3-.2 10.9 1.4 4.2 1.9 7.8 6 7.6 10.9.4 6.4-5.5 11-11.5 11.3l-99 .6c-4.4-.1-8.1 1-12.4-.5l-.8-2.3c1.7-5.7 2.5-11.2-.1-16.7-1-2 .2-3.9 2.5-3.9Z" fill="#000"/><path d="M510.5 581.6c2.1 1.8 3.3 4.8 1.3 7.3-2.4 3.3-7.5 2.6-11.1 2.5v-12c3.3.3 7.1-.2 9.8 2.2ZM401.7 580.2h5c.2 4 .3 8 .2 12h-5.1c.4-4 .4-8 0-12ZM412.5 580.2h13.6l.3 12h-13.2l-.7-12ZM432.1 579.9l19-.1v12c-6.2 0-12.5.3-18.9.2V580ZM456.8 579.8c6.2-.1 12.5 0 18.7-.2l.3 12-18.6.3c-.3-4-.4-8-.4-12.1ZM481.4 579.5c4.5.2 9 0 13.4 0v12c-4.4 0-8.8.2-13.2 0 0-4-.3-8-.2-12Z" fill="#fff"/></g><g transform="translate(-161 -83)"></g><g transform="translate(-161 -83)"></g><g transform="translate(-161 -83)"><path d="M530 122.8a69.9 69.9 0 0 1 42.2 26.5c8.8-5.3 18-9.6 27.8-12.2 12-3.5 24.7-4.2 37-2.8 15.4 2 30.6 9 40.1 21.6a47 47 0 0 1 9.3 31.1c6.5.8 12.9 1.4 19.1 3.3a63 63 0 0 1 34.4 22.9 41.8 41.8 0 0 1 7.6 30.9 70.5 70.5 0 0 1 61 9.4c8.3 6 15.1 13.7 19 23.3 4 10 4 21.4-.2 31.2a45.9 45.9 0 0 1-13 17.1 58 58 0 0 1 42.9 24.7c1.1 1.8 1.6 4-.1 5.6-1.7.4-3.5-.9-5-1.4-3.5-1.7-7-1.4-10.7-1.4a54 54 0 0 1 3.5 70.3 44.6 44.6 0 0 1-29.7 16.7c6.8 17.8 1.5 41-14 52.7-1.7 1.3-4 2.7-5.6.2a56.6 56.6 0 0 0-26.3-27.3 30 30 0 0 1-6.4 11.7 37.1 37.1 0 0 1-55.1-3.7c-5-7-6-15.7-3-23.8-6 3.8-11.7 7.6-16.1 13.3-2 2.4-3.6 2.2-6 .6a59 59 0 0 1-24.2-46.3 78.2 78.2 0 0 1 14.4-48.5c-15.4 2-30.2-8-35.3-22.4a48 48 0 0 1-24.6 7.3 52.3 52.3 0 0 1-30.2-9.2 85.3 85.3 0 0 1-28.4-33.1c-2.5 3.2-5 6.4-8 9.4a74.8 74.8 0 0 1-55.4 22.4c-13.3-.4-26-4.7-37-12.2a59.8 59.8 0 0 0 13.4 23c1.2 1.1 2 2.3 1.4 4-1.5 2.2-4.3 3.6-6.6 4.7a76.4 76.4 0 0 1-49.2 5.9 81 81 0 0 1-39.3-20.6c-8.3 12.7-23 18-37.7 17.4a279 279 0 0 0-18.4 49c-1.1 3.8-1.7 7.8-3.1 11.4-.8 1.8-2.7 2.3-4.5 1.6a34.7 34.7 0 0 1-19.7-20.4 51.8 51.8 0 0 1-2-33.4c-11.1.6-21.4-3.6-29.1-11.5a60.7 60.7 0 0 1-15.4-40.8 78 78 0 0 1 13.9-46.3c1.5-1.8 2.6-4 5.4-3.3 1.9 1.2 1.4 3.7 2 5.6.5 4.4 3 8.3 5.2 12 5.4-15.5 18.6-29.3 35.8-30.3-.6-3.2-1.3-6.4-1.2-9.7a55 55 0 0 1 19.3-38.8 41.1 41.1 0 0 1 26-10.4c1.2-14.3 9-27.7 19-37.7a65 65 0 0 1 38.8-18.9c10-1 20.3 1.7 28.5 7.7 23.8-24 60.4-35.5 93.6-28.2ZM718.5 576.5c1.4-.9 2.6-.3 4 0a81 81 0 0 0 16.5 2.3l7.1-.2c2 .9 2 2.5 2 4.4a33.2 33.2 0 0 1-5.3 17.7 27 27 0 0 1-16.8 11.4 25.7 25.7 0 0 1-21.7-5.4c-1.7-1.5-3.2-3.8-1.5-5.9 3.7-5 7.5-10 10.7-15.3 1.8-2.9 2.9-6.3 5-9Z" fill="#000"/><path d="M518.8 126.7a69.8 69.8 0 0 1 44.1 20.4c2.5 2.5 4.3 5.7 6.7 8.2 1.8 1.3 3.4.4 5-.6a90.7 90.7 0 0 1 67.5-13.6 53.2 53.2 0 0 1 28.6 16.2 41 41 0 0 1 10 29.7c0 1.5-.4 3.5.3 4.9 1.1 1.2 2.4 1 4 1.2a69 69 0 0 1 38.7 12.2c9 6.4 16.2 15.6 18 26.7.4 5.5.8 11-1.6 16.2-.9 2.5 1.2 4.3 3.6 3.4a65 65 0 0 1 58.8 4.8c8.5 5.4 15.8 13 19.5 22.5 3.4 8 3.7 17.5.5 25.6a39 39 0 0 1-13 16.9c-2.5 1.9-5.4 3.4-7.7 5.6-1.4 1.6 0 4.5 2.2 4.3 5.4 0 10.6-.7 16 .4 10.8 2 20.2 7.9 27.8 15.7-3.7 0-8.8-.6-11.8 1.6-1.9 1.2-2.5 3.3-1.2 5.1 2.5 3.2 5.6 5.8 7.7 9.4 7.1 10.8 9 23.9 6.8 36.5a44 44 0 0 1-17.8 27.5c-6.4 4.2-13.7 7-21.5 6.1-2.2-.4-2.8 2.6-1.9 4.2A42 42 0 0 1 799 487a70.9 70.9 0 0 0-18.2-21.6c-3.3-2.6-7.2-4-10.7-6.3-1.5-3.8-.4-8.5-4.8-10.4l-2.8 1.3c.1 4 1.8 7.3 1.5 11.1-.3 6.4-4.2 12-9.4 15.5a32 32 0 0 1-39.4-3.6 19.9 19.9 0 0 1-5.8-18.7c.8-3.3 2.7-5.7 4.4-8.5 1-1.2 0-3-.4-4.4-2 .1-4 .2-5.8 1-8.5 3.3-16 9.1-22 15.8a51.6 51.6 0 0 1-19.8-30.3 71.7 71.7 0 0 1 16-61.2c1.3-1.8 2.6-3.3 1.3-5.5-1.5-2-4-.7-5.9 0-9.9 4.6-22.3-.1-29-8.2-3.5-3.9-5-8.5-6.8-13.4-2.2-.2-3.8-.4-5.8 1a42 42 0 0 1-23.5 7 48.2 48.2 0 0 1-29.2-10.4 84.4 84.4 0 0 1-25.7-34l-2.3-1.6c-1.4 1.1-2.7 2.1-3.6 3.7a68.2 68.2 0 0 1-58.2 31.7 59 59 0 0 1-38.6-13.4c-1.2-.9-2.6-2.1-4.3-1.4-2.2 1-2.5 3.8-2 6 1.9 10.2 7.2 20 13.7 28a72.3 72.3 0 0 1-66.7-.3 71 71 0 0 1-34-37 60.3 60.3 0 0 1-2.7-35.8c.4-1.9 1-3.6 0-5.4-1.9-1.1-3.8-1-4.8 1.1-7 22.7.5 47.2 15.9 64.7a32.5 32.5 0 0 1-23.5 15.2c-7.6.8-15.1.5-22.2-2.4-4.5-1.6-8.2-4.3-12.2-6.7-3-1.3-5.5 2.7-2.8 4.7 6 5.1 14 8.3 21.8 10-8.9 18.1-16 37-20.8 56.6-8-3.8-12.4-11.2-15.3-19.3a42.3 42.3 0 0 1-.3-27.3c.7-2.8 2.6-5-.3-7.2-4-.5-7.8 1.3-12 .3A33.5 33.5 0 0 1 258 351a61.6 61.6 0 0 1-7.9-40c1-10.6 4.8-21 10.3-30 1.9 5.3 4.6 11 8.9 14.8 1.4 1.3 3.2 1.3 4.9.4 1.1-2.4 1-5.4 2-8a39.3 39.3 0 0 1 23.3-22.6c4-1.3 7.5-.4 11.5-.5 1.2-.4 1.7-1.9 2.4-2.8-4.9-11.3-2.4-23.2 3.2-33.7a45.2 45.2 0 0 1 26-21.9c3.7-1.2 7.4-.5 11.3-1 2-.7 1.6-2.9 2-4.7 1.2-13.2 7.6-25 16.9-34.2a59.1 59.1 0 0 1 36.2-17.9 35 35 0 0 1 23.4 6.2c-9 11.3-16 23.4-18 38-.2 2.2 1.6 3.5 3.7 3.2 2.3-1.2 2-3.6 2.7-5.8a69.1 69.1 0 0 1 14.8-30 98.3 98.3 0 0 1 83.2-33.8ZM721.5 582c6.8 1.2 13.6 2.2 20.6 2.4-.2 9-5.4 17.6-13.9 21a20.7 20.7 0 0 1-19.8-2.5c4.7-6.9 9.4-13.5 13.1-21Z" fill="#796a45"/></g><g transform="translate(-161 -83)"></g></g></svg>
+                                                    <?php elseif($event['tete'] == 'avatar3'): ?>
+                                                        <svg style="display: flex;justify-self:center" width="70%" height="auto" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 762 762" fill="none" shape-rendering="auto" width="180%" height="auto"><metadata xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"><rdf:RDF><rdf:Description><dc:title>Adventurer</dc:title><dc:creator>Lisa Wischofsky</dc:creator><dc:source xsi:type="dcterms:URI">https://www.figma.com/community/file/1184595184137881796</dc:source><dcterms:license xsi:type="dcterms:URI">https://creativecommons.org/licenses/by/4.0/</dcterms:license><dc:rights>Remix of „Adventurer” (https://www.figma.com/community/file/1184595184137881796) by „Lisa Wischofsky”, licensed under „CC BY 4.0” (https://creativecommons.org/licenses/by/4.0/)</dc:rights></rdf:Description></rdf:RDF></metadata><mask id="viewboxMask"><rect width="762" height="762" rx="0" ry="0" x="0" y="0" fill="#fff" /></mask><g mask="url(#viewboxMask)"><path d="M396 164.8a224.8 224.8 0 0 1 104.8 42.4c6.2 4.9 12.5 9.4 18 15a225.4 225.4 0 0 1 71.8 149 58.5 58.5 0 0 1 50.9 42.2 71 71 0 0 1-27.6 76.5c-11 7.7-24.5 12-38 11.7-5 0-10-1.6-15-1.8-1.9 2.2-3.3 4.9-4.8 7.3A223.3 223.3 0 0 1 389 609.8c-11 .7-21.9 2-33 .7a223.7 223.7 0 0 1-178.8-342.3A223.4 223.4 0 0 1 352 163.5c14.6-1.4 29.4-.3 44 1.3Z" fill="#000"/><path fill-rule="evenodd" clip-rule="evenodd" d="M498.8 213.2A216 216 0 0 0 363 169c-13-.2-26.2 1.6-39 4a218 218 0 0 0-113.6 365.5 218.5 218.5 0 0 0 260.4 40.2c35-18.8 64.2-47.3 84.4-81.5l-3-1.6c-2.8-1.4-5.7-3-8-5-2.2-2-.3-5.8 2.7-4.7 1.5.7 3 1.6 4.4 2.4a55 55 0 0 0 59.6-3.6 64.5 64.5 0 0 0 25-69.8 53.1 53.1 0 0 0-24-31 52.6 52.6 0 0 0-47-2.8c-1.6.8-3.4 1.5-5 1.3-2.5-.2-2.8-4.2-.6-5.2 8-4 16.5-5.6 25.4-6.4a217 217 0 0 0-72-146.4c-4.4-4-8.7-8.1-13.9-11.3Zm107.6 196.2c2-1.2 1.3-5.1-1.4-5-2 0-4.2.8-6.2 1.6l-1.4.4a95.1 95.1 0 0 0-25.5 12.4c-2.2 2-2.2 4.4.1 6.2a92 92 0 0 0 5.2 2.8 36 36 0 0 1 13 9.2c-.2 1.9-2 3.4-3.4 4.5l-.2.2c-3.9 3-8.8 5-13.6 7-2.5 1-4.9 2-7.1 3.1-1.7.8-2.6 2.2-1.6 3.9 1 2 3.2 1.1 5 .5l.6-.2 5.4-2.3c5.4-2.3 11-4.5 15.4-8 2.7-2.1 5.1-5.1 5.4-8.7-.5-3.4-2.7-5.7-5.3-7.8a83 83 0 0 0-11.6-7.2l-1.1-.6c5.4-3 10.8-5.6 16.6-7.7l5-1.7a52 52 0 0 0 6.7-2.6Z" fill="#ecad80"/><g transform="translate(-161 -83)"><path d="M559 424.1a65.3 65.3 0 0 1 57.5 38.4l23.8-15c1.3 1 2.4 2.2 3.6 3.4-3.2 3.6-7.1 5.4-11 8l-14.3 9a65.8 65.8 0 0 1-18 69.8 64.6 64.6 0 0 1-42.6 16.8 65.7 65.7 0 0 1-61.5-90 65.1 65.1 0 0 1 62.5-40.4Z" fill="#000"/><path d="M549.3 430.3a59.6 59.6 0 1 1 15.1 118.2 59.6 59.6 0 0 1-15.1-118.2Z" fill="#fff"/><path d="M414 454a55 55 0 1 1-79.4 30.7c-5.8-3.6-12.1-6.6-17.7-10.5-2-1.1-1.5-4.2.7-4.7 1.6-.5 3.1.6 4.6 1.3l14.4 8.5A55.2 55.2 0 0 1 414 454Z" fill="#000"/><path d="M378.3 453.3a49.3 49.3 0 1 1 17.2 97.1 49.3 49.3 0 0 1-17.2-97.1Z" fill="#fff"/><path d="M527.3 466.2a24 24 0 0 1 20.2 7.3 23.9 23.9 0 0 1-2.3 34.7 23.9 23.9 0 0 1-38.7-20.2 23.8 23.8 0 0 1 20.8-21.8ZM358.5 480.8a21.8 21.8 0 1 1 11.6 42 21.9 21.9 0 0 1-25.7-14 22.3 22.3 0 0 1 14.1-28Z" fill="#000"/></g><g transform="translate(-161 -83)"><path d="M582.3 370.7c14 7 27.8 17.3 36.6 30.5a3 3 0 0 1-4.3 4.2A104.4 104.4 0 0 0 482 425c-1.6 2-4 3.6-6.2 1.2-1.7-2.6-2.3-6-3.3-9-2 4.8-3.9 9.6-6.2 14.1-1.6 3.2-6 1.1-7-1.4-3.1-6.9-6.3-13.8-9-20.8v17c-.2 2 .2 4.3-2.2 5.1-2 .3-4.3-1-5.3-2.9-3.2-5.8-6.2-11.9-9.4-17.8 1 5.5 2.6 11 3 16.6.2 2-2.2 3.4-4 2.3a132.6 132.6 0 0 0-58.3-10 65.3 65.3 0 0 0-36 12.6c-3 2.4-5.2 5.5-8 8.2-1.6.7-3.2-.3-4.9-.7.1-1.9.2-3.7.8-5.6a86.6 86.6 0 0 1 40-50c13.5-7.4 30.1-9 44.6-3.4a57.4 57.4 0 0 1 27.6 24c2.4-2.9 4.3-6 6.8-8.8 1.6-1.5 4.6-1.5 5.6.8 2.6 5.1 4.7 10.5 7 15.7L462 390c.4-1.5.6-3.2 1.6-4.5 1.7-1.2 3-.2 4.7.1l.8 2.6c2-4.8 4.7-9.1 8.4-12.8A62.1 62.1 0 0 1 512 359c23.9-3.6 48.9 1.2 70.4 11.8Z" fill="#000"/></g><g transform="translate(-161 -83)"><path d="M481 561.7c4.7-.6 10.2 0 13.7 3.6 3.8 4 4.1 9.5 3.2 14.6A30.8 30.8 0 0 1 473 603a32.8 32.8 0 0 1-22.2-4 26 26 0 0 1-11-13 15.4 15.4 0 0 1-.5-10.6c1.3-3.2 4.1-5 7.3-5.7 5.7-1.9 11.7.2 16.7 3 4.6-5 10.5-10.2 17.6-11.1Z" fill="#000"/><path d="M480.5 567.7c3.3-1 7.4-.6 10 1.8 2 2 2.1 5.9 1.7 8.5a24.8 24.8 0 0 1-20 19.4 26.8 26.8 0 0 1-18.9-3.7c-4.3-2.5-7.4-7-8.8-11.7-.7-2.5-.4-5.1 2-6.4 2.6-1.1 5.8-1 8.5-.5 3.5.7 5.8 2.9 9 4.3 2 0 2.6-1.4 3.8-2.6 3.3-4 7.7-7.6 12.7-9.1Z" fill="#8F2E45"/></g><g transform="translate(-161 -83)"></g><g transform="translate(-161 -83)"></g><g transform="translate(-161 -83)"><g fill="#000"><path d="M546 236.8a220 220 0 0 1 141.8 52.3 189.7 189.7 0 0 1 60.4 97.9c5.5 21.9 6.6 44.4 4.3 66.8-.4 1.8-.5 5.6-3 5.6-4.2.2-8.5 0-12.7 1.2a64.9 64.9 0 0 0-31.2 17c-1 1-2 2.2-3.6 1.8-1.6 0-2.3-2-2.1-3.4.3-3 1.5-6 2.1-9 1.6-6.7 1.9-13.2 2.5-20 .6-6.8-.3-13.3-.9-20-.4-3.8-1.2-7.3-2-11a54.2 54.2 0 0 1-26.5-7c-15.8-9-27.3-25-35.5-40.8-9.8-19-16-40-20.2-60.8a441.8 441.8 0 0 1-91.2 25.9 561.7 561.7 0 0 1-101.2 9 386 386 0 0 1-71.2-6c-2-.4-3.5-1.1-3.6-3.3 1-3.8 4-7.3 6.5-10.3 9-11 19-21 29.9-30.1A242 242 0 0 1 546 236.8Z"/><path d="M718.6 474.6c0 1 .3 2.7-.5 3.5-2.2 2.4-5.1 4.2-7.6 6.4-2.6 2.2-4.8 4.9-7.5 6.9-2.7.5-4-2-2.7-4.1 2.7-3.8 6.7-6.8 10.2-9.8 2.7-2 4.5-4.7 8-3Z"/></g><path d="M520.2 243.8c41.3-4.2 83.5 2.8 120.8 21.2a194.1 194.1 0 0 1 79.2 70.7 181 181 0 0 1 26.4 118 68 68 0 0 0-38.6 14c2.8-16.5 3.5-33.4 0-49.8-.7-2.4-1.2-5.3-2.8-7.1-1.6-1.2-4.3-.8-6.2-1-8 .2-16-2.8-22.9-7a87.5 87.5 0 0 1-27.6-30.3 211 211 0 0 1-22.2-60.5c-.8-3.3-1.1-6.8-2.3-10-.9-1.4-2.4-1.8-4-1.2-3.6 1.3-7.1 3-10.7 4.3a443.8 443.8 0 0 1-82.3 22.5 588.4 588.4 0 0 1-81 8.7c-14.6.2-29.4.4-44-.4-14.3-1-28.4-2.4-42.5-4.8a232.8 232.8 0 0 1 160.7-87.3Z" fill="#ac6511"/></g><g transform="translate(-161 -83)"></g></g></svg>
+                                                    <?php elseif($event['tete'] == 'avatar4'): ?>
+                                                        <svg style="display: flex;justify-self:center" width="70%" height="auto" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 762 762" fill="none" shape-rendering="auto" width="180%" height="auto"><metadata xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"><rdf:RDF><rdf:Description><dc:title>Adventurer</dc:title><dc:creator>Lisa Wischofsky</dc:creator><dc:source xsi:type="dcterms:URI">https://www.figma.com/community/file/1184595184137881796</dc:source><dcterms:license xsi:type="dcterms:URI">https://creativecommons.org/licenses/by/4.0/</dcterms:license><dc:rights>Remix of „Adventurer” (https://www.figma.com/community/file/1184595184137881796) by „Lisa Wischofsky”, licensed under „CC BY 4.0” (https://creativecommons.org/licenses/by/4.0/)</dc:rights></rdf:Description></rdf:RDF></metadata><mask id="viewboxMask"><rect width="762" height="762" rx="0" ry="0" x="0" y="0" fill="#fff" /></mask><g mask="url(#viewboxMask)"><path d="M396 164.8a224.8 224.8 0 0 1 104.8 42.4c6.2 4.9 12.5 9.4 18 15a225.4 225.4 0 0 1 71.8 149 58.5 58.5 0 0 1 50.9 42.2 71 71 0 0 1-27.6 76.5c-11 7.7-24.5 12-38 11.7-5 0-10-1.6-15-1.8-1.9 2.2-3.3 4.9-4.8 7.3A223.3 223.3 0 0 1 389 609.8c-11 .7-21.9 2-33 .7a223.7 223.7 0 0 1-178.8-342.3A223.4 223.4 0 0 1 352 163.5c14.6-1.4 29.4-.3 44 1.3Z" fill="#000"/><path fill-rule="evenodd" clip-rule="evenodd" d="M498.8 213.2A216 216 0 0 0 363 169c-13-.2-26.2 1.6-39 4a218 218 0 0 0-113.6 365.5 218.5 218.5 0 0 0 260.4 40.2c35-18.8 64.2-47.3 84.4-81.5l-3-1.6c-2.8-1.4-5.7-3-8-5-2.2-2-.3-5.8 2.7-4.7 1.5.7 3 1.6 4.4 2.4a55 55 0 0 0 59.6-3.6 64.5 64.5 0 0 0 25-69.8 53.1 53.1 0 0 0-24-31 52.6 52.6 0 0 0-47-2.8c-1.6.8-3.4 1.5-5 1.3-2.5-.2-2.8-4.2-.6-5.2 8-4 16.5-5.6 25.4-6.4a217 217 0 0 0-72-146.4c-4.4-4-8.7-8.1-13.9-11.3Zm107.6 196.2c2-1.2 1.3-5.1-1.4-5-2 0-4.2.8-6.2 1.6l-1.4.4a95.1 95.1 0 0 0-25.5 12.4c-2.2 2-2.2 4.4.1 6.2a92 92 0 0 0 5.2 2.8 36 36 0 0 1 13 9.2c-.2 1.9-2 3.4-3.4 4.5l-.2.2c-3.9 3-8.8 5-13.6 7-2.5 1-4.9 2-7.1 3.1-1.7.8-2.6 2.2-1.6 3.9 1 2 3.2 1.1 5 .5l.6-.2 5.4-2.3c5.4-2.3 11-4.5 15.4-8 2.7-2.1 5.1-5.1 5.4-8.7-.5-3.4-2.7-5.7-5.3-7.8a83 83 0 0 0-11.6-7.2l-1.1-.6c5.4-3 10.8-5.6 16.6-7.7l5-1.7a52 52 0 0 0 6.7-2.6Z" fill="#9e5622"/><g transform="translate(-161 -83)"><path d="M555 424a65.3 65.3 0 0 1 63.5 43.5c2.1 5.6 2.6 11.1 3.6 17-1.3 1.4-1.6 3.3-4 3-7-.4-14-2.1-21-2.3-8.8 0-17.4-.3-26.1 1-9.9 1.6-19.5 2.6-29.1 5.7a175 175 0 0 0-32.5 12.4c-3.3 1.7-6.5 3.8-9.9 5.3-2 .7-4.4.3-5.3-2a65.6 65.6 0 0 1 17.2-65.2 65 65 0 0 1 43.6-18.3Z" fill="#000"/><path d="M557 429.9a59.1 59.1 0 0 1 59 52.4c-14.8-2.9-30-3.8-45-2.5-6 .7-12 1.9-17.9 2.9-1-3.3-1.7-6.4-3.6-9.3a26.1 26.1 0 0 0-46.2 3.8c-3.1 7.4-2.3 15.5 1.2 22.6l-5.8 3a60 60 0 0 1 20.5-59.6 59 59 0 0 1 37.8-13.3Z" fill="#fff"/><path d="M411.4 452.6a55 55 0 0 1 29.4 61.2l-2.9 1.6c-9.8-2.8-19.7-4.7-29.9-5.5-17.9-1.1-36.1-1.7-54 0-7 .2-13.5 2-20.4 1.6-1-2.4-1.8-4.8-1.8-7.5a55 55 0 0 1 79.6-51.5Z" fill="#000"/><path d="M397.2 453.6a49.6 49.6 0 0 1 38.6 55.3 83 83 0 0 0-12.3-3c-12.4-1.9-25-2.6-37.6-2.4-.1-3.9 0-7.4-1.5-11a23.1 23.1 0 0 0-42.7-.8c-2.2 5-1.8 9.7-2 14.9-1.7-1.3-2-1.4-2-3.5a49.4 49.4 0 0 1 59.5-49.4Z" fill="#fff"/></g><g transform="translate(-161 -83)"><path d="M456 380.4c2.3-.1 2.9 1.7 2.7 3.6-.5 4.7-.8 9.8-2.4 14.2-1.3.4-2.6.6-4 .9-1.1-4.8 0-10.3.7-15.1.4-1.7.8-3.9 3-3.6ZM476.8 386.6c0 3.3-.4 6.4-.7 9.6 41.7.5 83.3.4 125 .8 2.2 0 4 .8 6 1.6-.7 1.5-.3 3.8-2.3 4-8 1.4-16.6.6-24.8 1-17.3.6-34.7 1-52 1.5-17 .2-34 1.2-51 1.4-3.4.4-6.1-2.7-7.3-5.5 0-4.4 1-9.1 2-13.5 1.4-2.4 3-1.6 5-.9ZM439.8 392.2c0 4.9 0 10.8-2.2 15.2-3.3 1.5-7.2 1.8-10.6 2.5l-77 14c-4.2.8-8.7 2.2-13 2.1-2.6-.5-3.3-3.7-.9-5 3.2-1.4 7-1.7 10.4-2.6l87.2-20.3 1.3-5.7c1.6-.2 3.2-.2 4.8-.2Z" fill="#000"/></g><g transform="translate(-161 -83)"><path d="M495.2 561c15.5 1.8 31.3 5.5 44.5 14.2 7 4.6 13.5 11.3 15.3 19.8 2.4 8.6-3.6 18.2-11.7 21.4-7.2 3-14 1.8-21.3.1-6-1-12-1.6-18-1.8-22.6-1-45.1.8-67.2 5.8-5.7 1-11.1 3.2-16.8 3.7-6.5.1-13-3.1-16.8-8.5-3-4.1-4.4-9.6-4.3-14.7.6-7.8 5.4-15 11.2-19.9a85 85 0 0 1 35.4-16.8 157 157 0 0 1 49.7-3.3Z" fill="#000"/><path d="M506 568.6a76 76 0 0 1-35.8 13 92 92 0 0 1-41.5-5c8.8-4.8 19.4-7 29.2-8.8 16.1-2.2 32.1-2.4 48 .8Z" fill="#fff"/><path d="M513.8 570.3c11 3.2 22.5 7.7 30.4 16.5 4.2 4.8 7 11.2 4 17.4-3 6.2-9.7 8.6-16.2 8a234.4 234.4 0 0 0-69-2 239.8 239.8 0 0 0-36 6.8c-5.7 1.4-11.3 2.1-16.2-1.8-6.6-5.3-7.4-14.6-3.5-21.8a40.2 40.2 0 0 1 14.7-13.6c4 2.5 8.4 3.7 13 5a95 95 0 0 0 67-6.8c4.3-2 7.8-5.1 11.8-7.7Z" fill="#8F2E45"/></g><g transform="translate(-161 -83)"></g><g transform="translate(-161 -83)"></g><g transform="translate(-161 -83)"><path d="M578 188.8c20.1 2.9 40 10.7 56 23.3 2 2 4.4 1.8 7 2.2a108.2 108.2 0 0 1 53.5 23.1c2 1.6 4 3.7 6.3 4.8a144 144 0 0 1 68.4 62.6 187.8 187.8 0 0 1 22 80.2c.4 10 .4 20 0 30a318.5 318.5 0 0 1-7.7 51.2c-.5 1.8-1.4 3.3-2.3 5-2-.8-4-1.4-5.6-2.8-5-4.3-11.8-6.2-18.1-7.5-5.7-1-12-1.3-17.6.2-2.1 1.7-3.7 4.2-5.5 6.3a170.5 170.5 0 0 1-38 31c-3.2 1.9-6.6 4-10.3 4.5-2.6-.4-3.3-2.3-2.7-4.7 2.4-10.3 4.5-20.5 4.5-31.2 0-25.8-4.6-51-10.8-76-3.1-11.1-6.2-22.5-10.8-33a123.6 123.6 0 0 1-36.5 49.9c-2.2 1.2-4.8.4-5-2.3a227.9 227.9 0 0 0-19-57.8c-1.6 8.4-2.8 16.9-5 25.2-2.1 8.5-5.4 16.5-8 24.8-.7 1.8-1 3.6-2.7 4.8-2.5.5-5.1-1.2-7-2.7-8.5-6.9-17-13.8-25-21-5.3-5-10.2-10.5-15.1-15.9a392.2 392.2 0 0 1-27.4-33.3 347 347 0 0 1-18.8 63c-.8 1.7-1.6 4.5-3.8 4.5-2 .4-3.6-1.2-3.7-3.2-.6-5.6-.4-11.4-1-17-1.4-13.6-1-27.2-1-40.9a263.1 263.1 0 0 0-15 26.1c-5.6 11-9.6 22.7-11.7 34.8-.5 2.6-.6 5.5-1.6 8-1.2 2.1-3.4 1-5 .1a97 97 0 0 1-45.4-57.8 251 251 0 0 0-25.3 33.9c-7.5 11.9-13.7 24-16.7 37.8-.8 3.4-.2 6.6-.3 10a3.2 3.2 0 0 1-3.3 3c-2.6 0-5.4-1.2-7.8-2.2a149.8 149.8 0 0 1-36.7-21.7c-4 12.3-6.1 25-7.5 37.7a185 185 0 0 0 .8 52.7c.2 1.8.7 3.3-.5 4.9a5 5 0 0 1-5.6-1c-3-2.8-5.3-6.2-7.6-9.4a108.1 108.1 0 0 1-19.4-63c0-18 5.1-34.6 12.6-50.7a78 78 0 0 1 7.2-12c-1.4-13.3-.5-26.7 3.3-39.5a83.8 83.8 0 0 1 21.7-36c-4.4-19.1-4.1-39.2 5.6-56.7 8.6-15.2 23-24.6 38.8-31.2 16.5-6.7 34.1-11 51.9-6.6a53.5 53.5 0 0 1 26.7 15.1 91.1 91.1 0 0 1 59.5-22.7c2.7.1 6-.3 8.6.8 2 2 2.9 5.2 4.2 7.7 18-10.1 39-12 59.2-9.4ZM786 557.4c2 1 3.2 3.5 3.3 5.5.5 5.7-.4 11.5-3 16.6-.8 2.2-2.3 4-1.8 6.5 2 12.5 5 23.8 5.3 36a65.4 65.4 0 0 1-10.6 44.1c-1.7 2.5-4.2 4.4-5.8 7a113.8 113.8 0 0 1-14.6 45.6 92.8 92.8 0 0 1-39.1 35c-1.8 1-5.8 1.3-6 3.7-2 6.9-5 13.5-8.7 19.6a101.5 101.5 0 0 1-24.4 26.5c-6.8 5.2-13.5 10.1-21.2 13.8-11.2 6-23.6 9.9-35.4 14.5 2.9 3.2 7 4.8 9.5 8.7 1.3 2.2.7 5.1-1.6 6.4-4.5 2.8-11 2.4-16 2.5-.7 9.6 3 17.5 6.8 26 4.8 10.3 8.8 20.9 12.3 31.7a68 68 0 0 1 2.4 36 72 72 0 0 1-29.7 43.5c-2.9 1.2-3.6-1.8-4.6-3.7a47.2 47.2 0 0 0-22-22c-12.5-6.8-25-12.4-34.2-23.5 0 5.4.3 10.8 2.4 15.9-.7 1-1.4 2.2-2.3 2.8-2.1.5-3.5-1-5-2a72.3 72.3 0 0 1-19-23.2 58.3 58.3 0 0 1-6.4-38.7c2.6-14.7 11.1-27 20.1-38.5 7-8.8 16-14.7 25.5-20.5-.5-2-1.8-4-1-6 1.3-4.4 4.7-6.2 8.5-8.2-.6-2.6-1-5.3-.7-8 1-10.4 4.9-20.5 11.5-28.5 1.8-2.5 4.1-4 4.2-7.5.7-7 2.3-13.7 5.2-20 6.4-13.6 14-26 27.6-33.2 2.6-11.5 6.4-22.6 12.7-32.7 5.3-8.3 11.3-16 19.5-21.7.4-6 1.5-12.3 3.6-18 2-2 4.8-3.4 7-5.1 11.1-8.3 21-18.5 30.3-28.7a187.1 187.1 0 0 0 24.5-32.5c1.3-2.3 2-6.5 4.9-7.3 3.8.4 7.2 2.4 11 2.8 6.8.8 13.8.4 20.5-1.2 11.2-2.8 23-8.5 30.2-17.7 1.4-1.4 2-2.7 4.4-2.3Z" fill="#000"/><g fill="#e5d7a3"><path d="M556 193.6c31-1.7 63.3 10 84.8 32.6 2 1.8 3.5 1.7 5.3-.2.5-2.5-1.4-3.8-2.7-5.7a105.8 105.8 0 0 1 48.1 22.1c17.7 14.4 30 34.2 37.7 55.4 6.6 18 9.8 37.2 10.8 56.2.3 3.5 0 7 .5 10.5 1.1 2.8 4.7 2.5 5.4-.5.7-5.2-.5-10.8-.6-16-2.3-34-12.4-67.4-34-94.2 19.4 11.1 36 26.9 48 45.8a174.7 174.7 0 0 1 25.9 82.4c1 8.2.5 16.6.6 25-.8 18.8-3.2 37.4-7.5 55.8-10.1-6.5-22-9-34-8.5 7.6-11.3 14.8-24 18-37.3.8-2.4-.8-3.2-2.2-4.8-2 1.2-3 2-3.5 4.2a113.6 113.6 0 0 1-15.3 32 152 152 0 0 1-51.5 47.6c3-13 4.8-26.7 3.6-40-1-22.1-5-43.6-10.4-65a238 238 0 0 0-13.9-39.6c5.3-13.3 8.5-27.1 8.8-41.4-.3-19.8-7.2-39.6-15.2-57.6-1-2-1.8-4.2-4.6-3.6-2.5 1-2 3.2-1 5.2 6.3 14 11.8 29.2 14.2 44.5.9 7 .9 14.4.2 21.5a128.9 128.9 0 0 1-10 34.6c-4.8 11-10.3 21.6-17.9 31.1-4 5.4-8.8 10-13.8 14.6a203.6 203.6 0 0 0-12.1-39.1 508.7 508.7 0 0 0-36.5-71.4c-2-3.2-3.8-6.9-6.4-9.7-1.7-1.5-4.2-.3-4.5 1.8.1 3.7 1.3 7.4 1.8 11 .7 3.9.5 7.8 1.3 11.6 1.7 1 2.4.8 4-.2 1.5-2.8.7-6.7.4-9.8a944.4 944.4 0 0 1 22.6 42c.5 1.3 1.6 2.9 1.1 4.2-1.3 5.4-2.5 10.8-3.2 16.3-2 13.5-6.1 26.2-10.7 39-12.3-9.9-25.2-20.1-35.7-31.9A415 415 0 0 1 528 337c-3.9-4.9-7.8-9.6-10.9-15.1l3.4-18.9c2.5-14.5 3.6-29.3 5-44 .6-17.9 1-36.8-4.3-54.1-.7-1.6 1-1.8 2-2.5a84 84 0 0 1 32.8-8.8Z"/><path d="M511.6 195.4c6.5 12.8 8 26.4 8.4 40.6.5 7.7 0 15.3-.3 23a467 467 0 0 1-6.5 52.2c-4.2 24.8-10 49.2-19.2 72.6-1-15.3-1-30.5-.8-45.8 0-3.6.9-7.6.1-11.1-1.2-2.6-5-2.2-6.4 0a180.1 180.1 0 0 0-15.1 23.9c-4.6 8.5-9 16.8-12 26a154 154 0 0 0-5.5 22A85.5 85.5 0 0 1 430 377c-15-19.8-22-45.3-21-70 .2-20.9 6.1-41.7 16.4-59.8 10.1-18 25.3-33.7 43.8-43a83 83 0 0 1 42.4-8.8Z"/><path d="M426.5 205.4a53.3 53.3 0 0 1 15.7 10.9 131.7 131.7 0 0 0-35.5 124.6c-15.4 17-29.3 36-39 56.9a77 77 0 0 0-7.6 27.8c-12-4.9-23.5-11-34-18.8-5.8-4.4-10.9-9.9-14.3-16.4A77.7 77.7 0 0 1 304 346c1.6-17.9 8.6-34.9 20.9-48.1 3 9.2 5.8 18.3 12.2 25.9 1.5 1.7 4.6 1.3 5.4-1 1.3-4 2-8 3.5-12a98.3 98.3 0 0 1 22-33.8c9.1-9 20.2-16.3 31.1-23 1.4-4.5-3.2-4.4-5.8-2.7-10.8 6.8-22 14.1-30.9 23.2a98.7 98.7 0 0 0-24 41.4 107.4 107.4 0 0 1-11-33.1c-1.1-6.5-1-13.3-.7-19.8a57 57 0 0 1 19.5-39.7c12.5-10.4 28.5-17 44.2-20.5a60 60 0 0 1 36 2.6ZM299.8 375c1.7 5.2 3.1 10.6 5.6 15.6 2.2 4.8 5.3 9 8.6 13.1-5.2 14-7.4 29.4-9 44.3a226 226 0 0 0-.1 44.7c-11-15.3-18.4-33-20-51.9-1-6.6-.8-13.2 0-19.8a124 124 0 0 1 14.9-46ZM784.3 565.8c-.4 4-1 8-3 11.7a69 69 0 0 1-15.8 19c-8.1 7-17 13.3-26.2 18.8-8.2 5-16.2 10.7-23.8 16.7-1-8.4-1.6-16.5-1.4-25 .2-4.4-.8-10.3 1.9-14 2.2-3.5 4.2-7 6-10.6a55 55 0 0 0 25 1.7 66 66 0 0 0 37.3-18.3ZM779.7 590c2 10.7 4.1 21.2 4.6 32 .7 13.5-.9 26.5-8.1 38.2a42.4 42.4 0 0 1-21 17 210 210 0 0 1-47.7 12.6 137 137 0 0 0-18.5 5.7c-.8-5-.6-9.5.4-14.5 2.5-11.7 8-22.7 16-31.5A178.5 178.5 0 0 1 746 618c12.5-8 24.1-16.6 33.7-28ZM708.3 603.5c-.1 10.7.8 21.4 2.6 32-4.4 4.3-8.6 8.8-12.6 13.4 0-9.5-2-18.6-3-28-.4-2 1.1-3 2.2-4.4 3.8-4.2 7.3-8.5 10.8-13ZM690.1 624.8c1.8 10.4 3.4 20.6 2.7 31.2-.4 1.9-1.6 3.5-2.4 5.2a60 60 0 0 0-7 36.8c-6.1 3.1-12 6.4-17.5 10.5a57.8 57.8 0 0 1-8.7-20.5 68.8 68.8 0 0 1 .3-34.7c12.5-8 22.1-18.2 32.6-28.5ZM649.7 674c.4 5.5 1.2 11 2.2 16.4 1.6 8 5.1 15.2 9.6 22a84.1 84.1 0 0 0-24.8 47c-5 2.2-9.6 4.9-14.1 7.9-2.4-6.6-1.8-14.3-1.9-21.3 0-10.5 1.7-20.7 4.4-30.8a85.8 85.8 0 0 1 24.6-41.3ZM767.5 677.3c-2.5 14.6-7.3 30-16.1 42.1A96.8 96.8 0 0 1 733 739a56.7 56.7 0 0 1-25 12.2c-10.4 1-20.8-.3-31-.2-11.4.5-23.2 1.9-34 5.9a80 80 0 0 1 19-36.8 81.2 81.2 0 0 1 27.6-18.4c8.8-3.7 18-6.2 27.4-7.6a164 164 0 0 0 50.5-16.7ZM616.2 728.8c-.4 5.5-1.4 10.7-1.3 16.2 0 9-.5 17.4 3 26a111.6 111.6 0 0 0-23.9 27.4 30 30 0 0 1-3.5-11.4 61.2 61.2 0 0 1 8.3-37.2 60.5 60.5 0 0 1 17.4-21ZM708.4 756.8c-1.8 5-3.8 9.7-6.3 14.3a104 104 0 0 1-32 33c-10.4 7.5-22.9 13-34.9 17.2-6.2 2.8-12 3.8-17.4 7.7-9-4-18.3-5.7-28-7.9a70 70 0 0 1 8.7-18.6 100.3 100.3 0 0 1 28.7-31.3 92.2 92.2 0 0 1 25.3-11.4 120 120 0 0 1 32.5-3.1c7.8.6 15.6.8 23.4.1ZM584.5 785.7c.6 6.6 2.4 12.8 6.3 18.2-3 5.1-5 10.5-6.8 16.1-2.8-.5-6-.9-8.7-2.2-2.5-10.8 2.8-23.4 9.2-32.1ZM571.5 824.7c4.9-1.8 10.5.6 15.5 1.4 15 3.4 29.1 5.7 40.8 16.5-11.5 3-25.4-.9-36.8-3.8-8.1-2.4-17.9-4.6-24.7-9.9 1.5-1.8 2.9-3.4 5.2-4.2ZM567 836.6c7.2 3.2 14.4 5.7 22 7.5a62.8 62.8 0 0 0-5.5 38c1 8.6 4 16.9 7.6 24.8.7 1.7 3.5 2.3 4.5.7 1.7-2-.3-5-1-7.2a77.2 77.2 0 0 1-6.4-31.4c.5-8.3 1.6-16.2 6.1-23.4 5.4 1.4 10.8 2.6 16.3 3.3-1.3 14.3 6.2 25.6 11.1 38.4 4.8 12.8 10.6 26.5 11.4 40.2.6 12.1-3.6 24.4-10.1 34.5a51 51 0 0 1-15.3 17c-2.7-5-6-9.6-10.2-13.5-7.9-7.7-17-11-26.4-16.6a55.6 55.6 0 0 1-20.9-17.2c-8.1-11.6-8.1-27.1-7-40.7a76 76 0 0 1 15-38.9 4 4 0 0 0 1-3c-.7-1.8-2.6-2.3-4-1.1a36 36 0 0 0-7.8 10.5c-6 10.9-9 23.2-10.3 35.5-.9 12.3 0 24.6 5.2 36a57.8 57.8 0 0 0-1 16 65.1 65.1 0 0 1-20-42c0-11.7 3.6-23 10-32.7 5-7.8 10.6-16.2 17.7-22.3a116 116 0 0 1 18-12.4Z"/></g></g><g transform="translate(-161 -83)"></g></g></svg>
+                                                    <?php endif;?>
+
+                                                    <?php if(isset($event['lunettes'])): ?>
+                                                        <?php if($event['lunettes'] == 'lunettes1'): ?>
+                                                            <img style="position: absolute; bottom:37%; left:68%" width="8%" height="auto" src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiA/PjwhRE9DVFlQRSBzdmcgIFBVQkxJQyAnLS8vVzNDLy9EVEQgU1ZHIDEuMS8vRU4nICAnaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkJz48c3ZnIGhlaWdodD0iNTEycHgiIGlkPSJMYXllcl8xIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA1MTIgNTEyOyIgdmVyc2lvbj0iMS4xIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiIgd2lkdGg9IjUxMnB4IiB4bWw6c3BhY2U9InByZXNlcnZlIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIj48cGF0aCBkPSJNNDY1LjQsMjQ3Yy0yLjItMjItMTIuNC00My0yOC45LTU4LjRjLTE3LjEtMTUuOS0zOS4zLTI0LjctNjIuNy0yNC43Yy00MS41LDAtNzcuMywyNy40LTg4LjUsNjdjLTctNy0xOC41LTExLjctMjkuMy0xMS43ICBjLTEwLjgsMC0yMi4zLDQuNy0yOS4zLDExLjdjLTExLjItMzkuNi00Ny02Ny04OC41LTY3Yy0yMy4zLDAtNDUuNiw4LjctNjIuNywyNC42QzU5LDIwNCw0OC44LDIyNSw0Ni42LDI0N0gzMnYxOGgxNC42ICBjMi4yLDIyLDEyLjQsNDMsMjguOSw1OC40YzE3LjEsMTUuOSwzOS4zLDI0LjcsNjIuNywyNC43YzUwLjgsMCw5Mi4xLTQxLjIsOTIuMS05MmMwLTAuMSwwLTAuMSwwLTAuMWgwYzAtOS45LDExLjUtMjEuNiwyNS43LTIxLjYgIHMyNS43LDExLjcsMjUuNywyMS42aDBjMCwwLDAsMCwwLDAuMWMwLDUwLjgsNDEuMyw5Miw5Mi4xLDkyYzIzLjMsMCw0NS42LTguNyw2Mi43LTI0LjdjMTYuNS0xNS40LDI2LjctMzYuNSwyOC45LTU4LjVINDgwdi0xOCAgSDQ2NS40eiIvPjwvc3ZnPg==">
+                                                        <?php elseif($event['lunettes'] == 'lunettes2'): ?>
+                                                            <img style="position: absolute; bottom:37%; left:68%" width="8%" height="auto" src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiA/PjxzdmcgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiB3aWR0aD0iNTEyIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjx0aXRsZS8+PHBhdGggZD0iTTQ5NiwxNzZIMTZ2NjRIMzcuMjRMNDkuNjgsMzUySDIyMS41NUwyNDAsMjQxLjMyVjI0MGExNiwxNiwwLDAsMSwzMiwwdjEuMzJMMjkwLjQ1LDM1Mkg0NjIuMzJsMTIuNDQtMTEySDQ5NloiLz48L3N2Zz4=" >
+                                                        <?php endif; ?>
+                                                    <?php endif; ?>
+                                                    <?php if(isset($event['chapeau'])): ?>   
+                                                        <?php if($event['chapeau'] == 'chapeau1'): ?>
+                                                            <img style="position: absolute; bottom:52%; left:68%" width="10%" height="auto" src="data:image/png;base64,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">
+                                                        <?php elseif($event['chapeau'] == 'chapeau2'): ?>
+                                                            <img style="position: absolute; bottom:52%; left:68%" width="10%" height="auto" src="data:image/png;base64,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">
+                                                        <?php endif; ?>
+                                                    <?php endif; ?>
+                                                <?php else: ?>
+                                                <svg xmlns="http://www.w3.org/2000/svg" style="position: absolute; bottom:40%; left:68%" width="120" height="120" fill="currentColor" class="bi bi-person-circle" viewBox="0 0 16 16" style="margin-left: 10px;">
+                                                    <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/>
+                                                    <path fill-rule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"/>
+                                                </svg>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <button class="carousel-control-prev" type="button" data-bs-target="#carouselExampleAutoplaying" data-bs-slide="prev">
+                            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                            <span class="visually-hidden">Previous</span>
+                        </button>
+                        <button class="carousel-control-next" type="button" data-bs-target="#carouselExampleAutoplaying" data-bs-slide="next">
+                            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                            <span class="visually-hidden">Next</span>
+                        </button>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </main>
+    <?php include('includes/footer.php');?>
+    <script>
+
+        const url_verif = new URLSearchParams(window.location.search);
+        if (url_verif.has('pdf')) {
+            document.addEventListener('DOMContentLoaded', function() {
+                const success = document.querySelector('.alert-success');
+                if (success) {
+                    genererPDF();
+                }
+            });
+        }
+
+        function genererPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            const titre = "<?php echo htmlspecialchars($_SESSION['saisi']['titre'] ?? ''); ?>";
+            const email = "<?php echo htmlspecialchars($_SESSION['saisi']['email'] ?? ''); ?>";
+            const dateDebut = "<?php echo htmlspecialchars($_SESSION['saisi']['dateDebut'] ?? ''); ?>";
+            const dateFin = "<?php echo htmlspecialchars($_SESSION['saisi']['dateFin'] ?? ''); ?>";
+            const ville = "<?php echo htmlspecialchars($_SESSION['saisi']['ville'] ?? ''); ?>";
+            const rue = "<?php echo htmlspecialchars($_SESSION['saisi']['rue'] ?? ''); ?>";
+            const duree = "<?php echo htmlspecialchars($_SESSION['saisi']['duree'] ?? ''); ?>";
+            const prix = "<?php echo htmlspecialchars($_SESSION['saisi']['prix'] ?? ''); ?>";
+            const capacite = "<?php echo htmlspecialchars($_SESSION['saisi']['capacite'] ?? ''); ?>";
+            const type = "<?php echo htmlspecialchars($_SESSION['saisi']['type'] ?? ''); ?>";
+            const description = "<?php echo htmlspecialchars($_SESSION['saisi']['description'] ?? ''); ?>";
+
+            doc.setFontSize(18);
+            doc.setFont("bold");
+            doc.text("Détails de votre événement mis en avant par CarMate", 10, 10);
+
+            doc.setDrawColor(245, 41, 56);
+            doc.setLineWidth(1.5);
+            doc.line(10, 14, 200, 14);
+
+            doc.setFontSize(12);
+            doc.setFont("normal");
+
+            doc.text(`Titre de votre événement : ${titre}`, 10, 30);
+            doc.text(`Adresse e-mail du responsable : ${email}`, 10, 40);
+            doc.text(`Date de début : ${dateDebut}`, 10, 50);
+            doc.text(`Date de fin : ${dateFin}`, 10, 60);
+            doc.text(`Ville : ${ville}`, 10, 70);
+            doc.text(`Rue : ${rue}`, 10, 80);
+            doc.text(`Durée estimée : ${duree}`, 10, 90);
+            doc.text(`Prix : ${prix} €`, 10, 100);
+            doc.text(`Type : ${type}`, 10, 110);
+            doc.text(`Capacité : ${capacite} places`, 10, 120);
+            
+            const descriptionBorne = doc.splitTextToSize(
+                `Description : ${description}`,
+                180
+            );
+            doc.text(descriptionBorne, 10, 130);
+
+            doc.save("CarMate_Evenement_" + titre + ".pdf");
+
+            <?php unset($_SESSION['saisi']); ?>
+            
+            history.replaceState(null, null, window.location.pathname);
+        }
+    </script>
+    <?php include('includes/lien_chatbot.php'); ?>
+</body>
+</html>
